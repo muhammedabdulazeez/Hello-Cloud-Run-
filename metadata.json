@@ -1,0 +1,6 @@
+{
+  "name": "Hello Cloud Run — GitHub Lab Repo & README Studio",
+  "description": "Generate, preview, and export a complete GitHub README.md and repository package with annotated Cloud Run lab screenshots.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
