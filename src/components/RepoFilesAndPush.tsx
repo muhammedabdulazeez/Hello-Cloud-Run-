@@ -1,12 +1,22 @@
 import React, { useState } from 'react';
-import { Check, Copy, Download, FolderGit2, Terminal } from 'lucide-react';
+import {
+  Archive,
+  Check,
+  Copy,
+  Download,
+  FolderGit2,
+  Terminal,
+} from 'lucide-react';
 import {
   LabScreenshot,
   REPO_FILES,
   RepoConfig,
   generateGitPushCommands,
+  generateReadmeMarkdown,
   generateRenameScript,
+  getScreenshotPath,
 } from '../data/labData';
+import { buildZipBlob } from '../utils/zipBuilder';
 
 interface RepoFilesAndPushProps {
   config: RepoConfig;
@@ -23,6 +33,8 @@ export function RepoFilesAndPush({
 }: RepoFilesAndPushProps) {
   const [selectedFile, setSelectedFile] = useState<RepoFileKey>('index.js');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [exportingZip, setExportingZip] = useState(false);
+  const [zipError, setZipError] = useState<string | null>(null);
 
   const renameScript = generateRenameScript(screenshots, config);
   const gitCommands = generateGitPushCommands(config);
@@ -45,10 +57,89 @@ export function RepoFilesAndPush({
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadRepoZip = async () => {
+    setExportingZip(true);
+    setZipError(null);
+    try {
+      const encoder = new TextEncoder();
+      const readmeText = generateReadmeMarkdown(config, screenshots);
+      const entries: { path: string; data: Uint8Array }[] = [
+        { path: 'README.md', data: encoder.encode(readmeText) },
+        ...(Object.keys(REPO_FILES) as RepoFileKey[]).map((key) => ({
+          path: key,
+          data: encoder.encode(REPO_FILES[key]),
+        })),
+      ];
+
+      const selectedShots = screenshots.filter((s) => s.included);
+      for (const shot of selectedShots) {
+        const res = await fetch(shot.publicSrc);
+        if (!res.ok) {
+          throw new Error(`Failed to bundle ${shot.targetFilename}`);
+        }
+        const buf = await res.arrayBuffer();
+        entries.push({
+          path: getScreenshotPath(shot, config),
+          data: new Uint8Array(buf),
+        });
+      }
+
+      const zipBlob = buildZipBlob(entries);
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${config.repoName.trim() || 'hello-cloud-run-lab'}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setZipError(
+        err instanceof Error ? err.message : 'Unable to build repository archive'
+      );
+    } finally {
+      setExportingZip(false);
+    }
+  };
+
   const includedCount = screenshots.filter((s) => s.included).length;
 
   return (
     <div className="space-y-6">
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">
+            Ready-to-Push Repository Package
+          </h2>
+          <p className="mt-1 text-xs text-slate-600">
+            Downloads <code className="font-mono">README.md</code>, all 4 lab
+            app files, and your {includedCount} selected screenshots already
+            placed inside{' '}
+            <code className="font-mono">{config.screenshotFolder}/</code> so
+            images render immediately on GitHub.
+          </p>
+          {zipError && (
+            <p className="mt-1.5 text-xs font-medium text-red-600">
+              {zipError}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleDownloadRepoZip}
+          disabled={exportingZip}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60 whitespace-nowrap shrink-0"
+        >
+          <Archive className="h-3.5 w-3.5" />
+          <span>
+            {exportingZip
+              ? 'Bundling Repo...'
+              : 'Download Complete Repo (.zip)'}
+          </span>
+        </button>
+      </section>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
